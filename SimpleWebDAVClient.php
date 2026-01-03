@@ -2,6 +2,7 @@
 
 namespace nova\plugin\webdav;
 
+use nova\framework\core\Logger;
 use nova\framework\http\Response;
 use nova\framework\http\ResponseType;
 use RuntimeException;
@@ -230,10 +231,12 @@ class SimpleWebDAVClient {
         }
 
         try {
-            list(, $code) = $this->request('PUT', $remotePath, [
+            list($body, $code) = $this->request('PUT', $remotePath, [
                 'upload_source' => $fp,
                 'upload_size' => $fileSize
             ]);
+
+            Logger::debug("WebDAV upload data: $code, body: $body");
 
             return $code >= 200 && $code < 300;
         } finally {
