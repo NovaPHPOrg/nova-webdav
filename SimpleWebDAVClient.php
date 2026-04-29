@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace nova\plugin\webdav;
 
 use nova\framework\core\Logger;
@@ -7,23 +9,25 @@ use nova\framework\http\Response;
 use nova\framework\http\ResponseType;
 use RuntimeException;
 use SimpleXMLElement;
-use function nova\framework\dump;
 
-class SimpleWebDAVClient {
+class SimpleWebDAVClient
+{
     protected $baseUrl;
     private $user;
     private $pass;
 
-    public function __construct(string $baseUrl, ?string $user = null, ?string $pass = null) {
+    public function __construct(string $baseUrl, ?string $user = null, ?string $pass = null)
+    {
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->user = $user;
         $this->pass = $pass;
     }
-    
+
     /**
      * 获取 baseUrl
      */
-    public function getBaseUrl(): string {
+    public function getBaseUrl(): string
+    {
         return $this->baseUrl;
     }
 
@@ -31,14 +35,14 @@ class SimpleWebDAVClient {
      * 获取目录列表
      * @return array 包含文件信息的数组 ['path', 'name', 'is_dir', 'size', 'mtime', 'type']
      */
-    public function listDir(string $path): array {
+    public function listDir(string $path): array
+    {
         $xmlBody = $this->defaultPropFindBody();
 
         list($response, $code) = $this->request('PROPFIND', $path, [
             'body' => $xmlBody,
             'headers' => ['Depth: 1', 'Content-Type: application/xml']
         ]);
-
 
         if ($code !== 207) {
             throw new RuntimeException("Failed to list directory. HTTP Code: $code, Path: $path");
@@ -52,7 +56,8 @@ class SimpleWebDAVClient {
     /**
      * 获取指定路径的资源属性（Depth: 0）
      */
-    public function getResourceInfo(string $path): ?array {
+    public function getResourceInfo(string $path): ?array
+    {
         $xmlBody = $this->defaultPropFindBody();
 
         list($response, $code) = $this->request('PROPFIND', $path, [
@@ -71,7 +76,8 @@ class SimpleWebDAVClient {
     /**
      * 判断路径是否为目录
      */
-    public function isDirectory(string $path): bool {
+    public function isDirectory(string $path): bool
+    {
         try {
             $info = $this->getResourceInfo($path);
             return $info !== null && ($info['is_dir'] ?? false);
@@ -83,7 +89,8 @@ class SimpleWebDAVClient {
     /**
      * 下载文件并保存到本地
      */
-    public function download(string $remotePath, string $localPath): bool {
+    public function download(string $remotePath, string $localPath): bool
+    {
         $fp = fopen($localPath, 'w+');
         if ($fp === false) {
             throw new RuntimeException("Cannot open local file for writing: $localPath");
@@ -94,9 +101,9 @@ class SimpleWebDAVClient {
                 'sink' => $fp
             ]);
             return $code >= 200 && $code < 300;
-        } catch (\RuntimeException $e){
+        } catch (\RuntimeException $e) {
             return false;
-        }finally {
+        } finally {
             if (is_resource($fp)) {
                 fclose($fp);
             }
@@ -107,26 +114,28 @@ class SimpleWebDAVClient {
      * 直接下载文件并输出到浏览器 (结合 Response)
      * 返回一个特殊的 Response 对象，该对象在发送时会流式传输内容
      * 支持 HTTP Range 请求（断点续传）
-     * 
-     * @param string $remotePath 远程文件路径
-     * @param string|null $downloadName 下载保存的文件名，默认为远程文件名
-     * @param string|null $rangeHeader 客户端的 Range 请求头，如 "bytes=0-1048575"
+     *
+     * @param  string      $remotePath   远程文件路径
+     * @param  string|null $downloadName 下载保存的文件名，默认为远程文件名
+     * @param  string|null $rangeHeader  客户端的 Range 请求头，如 "bytes=0-1048575"
      * @return Response
      */
-    public function downloadToResponse(string $remotePath, ?string $downloadName = null, ?string $rangeHeader = null): Response {
+    public function downloadToResponse(string $remotePath, ?string $downloadName = null, ?string $rangeHeader = null): Response
+    {
         $url = $this->buildUrl($remotePath);
 
         $name = $downloadName ?? basename(urldecode($remotePath));
-        
+
         // 创建匿名类继承 Response，支持 Range 请求的流式传输
-        return new class($url, $this->user, $this->pass, $name, $rangeHeader) extends Response {
+        return new class ($url, $this->user, $this->pass, $name, $rangeHeader) extends Response {
             private $url;
             private $user;
             private $pass;
             private $name;
             private $rangeHeader;
 
-            public function __construct($url, $user, $pass, $name, $rangeHeader) {
+            public function __construct($url, $user, $pass, $name, $rangeHeader)
+            {
                 // 初始化父类，默认 200，如果有 Range 会在 send() 中改为 206
                 parent::__construct('', 200, ResponseType::RAW);
                 $this->url = $url;
@@ -134,7 +143,7 @@ class SimpleWebDAVClient {
                 $this->pass = $pass;
                 $this->name = $name;
                 $this->rangeHeader = $rangeHeader;
-                
+
                 // 基础头信息
                 $this->header['Content-Type'] = 'application/octet-stream';
                 $this->header['Content-Disposition'] = 'attachment; filename="' . $name . '"';
@@ -143,16 +152,17 @@ class SimpleWebDAVClient {
                 $this->header['Accept-Ranges'] = 'bytes';
             }
 
-            public function send(): void {
+            public function send(): void
+            {
                 $ch = curl_init($this->url);
-                
+
                 $headers = [];
-                
+
                 // 如果客户端发送了 Range 请求，转发给 WebDAV 服务器
                 if ($this->rangeHeader !== null) {
                     $headers[] = 'Range: ' . $this->rangeHeader;
                 }
-                
+
                 curl_setopt_array($ch, [
                     CURLOPT_RETURNTRANSFER => false,
                     CURLOPT_FOLLOWLOCATION => true,
@@ -162,14 +172,14 @@ class SimpleWebDAVClient {
                     CURLOPT_HEADER => false,
                     CURLOPT_BUFFERSIZE => 131072, // 128KB，减少回调次数
                     // 透传响应头：只捕获关键头部，不做任何修改判断
-                    CURLOPT_HEADERFUNCTION => function($ch, $header) {
+                    CURLOPT_HEADERFUNCTION => function ($ch, $header) {
                         $len = strlen($header);
                         $headerLine = trim($header);
-                        
+
                         if (empty($headerLine)) {
                             return $len;
                         }
-                        
+
                         // 只透传这几个关键头，原样设置
                         if (stripos($headerLine, 'Content-Range:') === 0) {
                             $this->header['Content-Range'] = trim(substr($headerLine, 14));
@@ -180,11 +190,11 @@ class SimpleWebDAVClient {
                         } elseif (stripos($headerLine, 'HTTP/') === 0 && strpos($headerLine, ' 206 ') !== false) {
                             $this->code = 206;
                         }
-                        
+
                         return $len;
                     },
                     // 流式输出数据
-                    CURLOPT_WRITEFUNCTION => function($ch, $data) {
+                    CURLOPT_WRITEFUNCTION => function ($ch, $data) {
                         static $headersSent = false;
                         if (!$headersSent) {
                             $this->sendHeaders();
@@ -199,16 +209,16 @@ class SimpleWebDAVClient {
                     curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC | CURLAUTH_DIGEST);
                     curl_setopt($ch, CURLOPT_USERPWD, $this->user . ':' . $this->pass);
                 }
-                
+
                 if (!empty($headers)) {
                     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
                 }
 
                 curl_exec($ch);
-                
+
                 $error = curl_error($ch);
                 curl_close($ch);
-                
+
                 if ($error) {
                     error_log("WebDAV download failed: $error");
                 }
@@ -219,7 +229,8 @@ class SimpleWebDAVClient {
     /**
      * 上传文件
      */
-    public function upload(string $localPath, string $remotePath): bool {
+    public function upload(string $localPath, string $remotePath): bool
+    {
         if (!file_exists($localPath)) {
             throw new RuntimeException("Local file not found: $localPath");
         }
@@ -246,23 +257,27 @@ class SimpleWebDAVClient {
         }
     }
 
-    public function delete(string $remotePath): bool {
+    public function delete(string $remotePath): bool
+    {
         list(, $code) = $this->request('DELETE', $remotePath);
         return $code >= 200 && $code < 300;
     }
 
-    public function mkdir(string $path): bool {
+    public function mkdir(string $path): bool
+    {
         list(, $code) = $this->request('MKCOL', $path);
         return $code === 201;
     }
 
-    private function buildUrl($path) {
+    private function buildUrl($path)
+    {
         $path = '/' . ltrim($path, '/');
         $encodedPath = str_replace('%2F', '/', rawurlencode($path));
         return $this->baseUrl . $encodedPath;
     }
 
-    private function request(string $method, string $path, array $options = []): array {
+    private function request(string $method, string $path, array $options = []): array
+    {
         $url = $this->buildUrl($path);
         $ch = curl_init($url);
 
@@ -304,8 +319,7 @@ class SimpleWebDAVClient {
             curl_setopt($ch, CURLOPT_UPLOAD, true);
             curl_setopt($ch, CURLOPT_INFILE, $options['upload_source']);
             curl_setopt($ch, CURLOPT_INFILESIZE, $options['upload_size']);
-        }
-        elseif (isset($options['body'])) {
+        } elseif (isset($options['body'])) {
             curl_setopt($ch, CURLOPT_POSTFIELDS, $options['body']);
         }
 
@@ -320,7 +334,7 @@ class SimpleWebDAVClient {
         $response = curl_exec($ch);
         $info = curl_getinfo($ch);
         $error = curl_error($ch);
-        
+
         curl_close($ch);
 
         if ($error) {
@@ -330,7 +344,8 @@ class SimpleWebDAVClient {
         return [$response, $info['http_code']];
     }
 
-    private function parsePropFindResponse(string $xmlContent, string $requestedPath = ''): array {
+    private function parsePropFindResponse(string $xmlContent, string $requestedPath = ''): array
+    {
         $entries = $this->parseMultistatusEntries($xmlContent);
 
         if ($requestedPath === '') {
@@ -348,7 +363,8 @@ class SimpleWebDAVClient {
         }));
     }
 
-    private function parseMultistatusEntries(string $xmlContent): array {
+    private function parseMultistatusEntries(string $xmlContent): array
+    {
         libxml_use_internal_errors(true);
         $xml = simplexml_load_string($xmlContent);
 
@@ -375,7 +391,8 @@ class SimpleWebDAVClient {
         return $entries;
     }
 
-    private function buildEntryFromResponse(SimpleXMLElement $responseNode): ?array {
+    private function buildEntryFromResponse(SimpleXMLElement $responseNode): ?array
+    {
         $responseDav = $responseNode->children('DAV:');
         $href = rawurldecode((string)($responseDav->href ?? ''));
 
@@ -418,7 +435,8 @@ class SimpleWebDAVClient {
         ];
     }
 
-    private function extractDavProp(?SimpleXMLElement $propstats): ?SimpleXMLElement {
+    private function extractDavProp(?SimpleXMLElement $propstats): ?SimpleXMLElement
+    {
         if ($propstats === null) {
             return null;
         }
@@ -441,7 +459,8 @@ class SimpleWebDAVClient {
         return $firstDav->prop ?? null;
     }
 
-    private function defaultPropFindBody(): string {
+    private function defaultPropFindBody(): string
+    {
         return <<<XML
 <?xml version="1.0" encoding="utf-8" ?>
 <D:propfind xmlns:D="DAV:">
@@ -456,7 +475,8 @@ class SimpleWebDAVClient {
 XML;
     }
 
-    private function pathEndsWithSlash(string $path): bool {
+    private function pathEndsWithSlash(string $path): bool
+    {
         return str_ends_with($path, '/');
     }
 }
