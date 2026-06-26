@@ -250,6 +250,11 @@ class SimpleWebDAVClient
             Logger::debug("WebDAV upload data: $code, body: $body");
 
             return $code >= 200 && $code < 300;
+        } catch (RuntimeException $e) {
+            // 与 download() 对称：curl/网络错误视为「上传失败」返回 false，
+            // 不向上抛——单个文件的网络抖动不应炸毁整批同步。
+            Logger::warning("WebDAV upload failed: {$remotePath}: " . $e->getMessage());
+            return false;
         } finally {
             if (is_resource($fp)) {
                 fclose($fp);
