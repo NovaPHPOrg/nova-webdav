@@ -22,6 +22,7 @@ class WebdavManager extends StaticRegister
     private function registerRoutes(): void
     {
         $this->getOrPost('/webdav/api/config', $this->map('config', 'config'));
+        $this->post('/webdav/api/test', $this->map('config', 'test'));
     }
 
     public static function registerInfo(): void

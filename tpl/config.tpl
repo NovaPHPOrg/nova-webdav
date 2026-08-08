@@ -48,7 +48,10 @@
                     ></mdui-text-field>
                 </div>
 
-                <div class="col-xs-12 action-buttons">
+                <div class="col-xs-12 action-buttons gap-2">
+                    <mdui-button id="test_webdav" icon="network_check" variant="tonal" type="button">
+                        测试连接
+                    </mdui-button>
                     <mdui-button id="save_webdav" icon="save" type="submit">
                         保存修改
                     </mdui-button>
