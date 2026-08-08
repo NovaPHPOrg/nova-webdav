@@ -268,10 +268,43 @@ class SimpleWebDAVClient
         return $code >= 200 && $code < 300;
     }
 
+    /**
+     * 创建远端目录。已存在（405/409）视为成功。
+     */
     public function mkdir(string $path): bool
     {
         list(, $code) = $this->request('MKCOL', $path);
-        return $code === 201;
+        // 201 Created；405 Method Not Allowed / 409 Conflict 常见于目录已存在
+        return $code === 201 || $code === 405 || $code === 409 || $code === 301 || $code === 200;
+    }
+
+    /** @see mkdir() */
+    public function mkcol(string $path): bool
+    {
+        return $this->mkdir($path);
+    }
+
+    /**
+     * WebDAV MOVE：把远端资源从 $from 挪到 $to。
+     *
+     * Destination 头必须是绝对 URL（RFC 4918）。
+     */
+    public function move(string $from, string $to, bool $overwrite = false): bool
+    {
+        $destination = $this->buildUrl($to);
+        try {
+            list(, $code) = $this->request('MOVE', $from, [
+                'headers' => [
+                    'Destination: ' . $destination,
+                    'Overwrite: ' . ($overwrite ? 'T' : 'F'),
+                ],
+            ]);
+        } catch (RuntimeException $e) {
+            Logger::warning("WebDAV move failed: {$from} → {$to}: " . $e->getMessage());
+            return false;
+        }
+        // 201 Created / 204 No Content / 200 OK
+        return $code >= 200 && $code < 300;
     }
 
     /**
