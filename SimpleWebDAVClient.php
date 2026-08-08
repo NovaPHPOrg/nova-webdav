@@ -274,9 +274,19 @@ class SimpleWebDAVClient
         return $code === 201;
     }
 
-    private function buildUrl($path)
+    /**
+     * 拼出最终请求 URL。
+     *
+     * WebDAV 路径是 URL path，分隔符永远是 `/`。
+     * 调用方若误用本地 DIRECTORY_SEPARATOR（Windows 上是 `\`），
+     * 坚果云等服务会直接拒绝：the nustore path is not valid。
+     * 在边界统一纠正，避免每个调用点各自处理。
+     */
+    private function buildUrl($path): string
     {
+        $path = str_replace('\\', '/', (string)$path);
         $path = '/' . ltrim($path, '/');
+        $path = preg_replace('#/+#', '/', $path) ?? $path;
         $encodedPath = str_replace('%2F', '/', rawurlencode($path));
         return $this->baseUrl . $encodedPath;
     }
